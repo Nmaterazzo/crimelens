@@ -562,8 +562,9 @@ function updateKPIs(trend) {
 async function loadNational() {
   setApiStatus('checking');
   try {
-    const where = `indicator_name='Murder and Non-negligent Manslaughter' and estimate_type='count' and estimate_domain_1='Offense count'`;
-    const data  = await ojpFetch(ENDPOINTS.violentOffenses, where);
+    // No year filter — fetch all years, filter client-side
+    const where = `indicator_name='Murder and Non-negligent Manslaughter' and estimate_type='count' and estimate_domain_1='Offense count' and permutation_number='1'`;
+    const data  = await ojpFetch(ENDPOINTS.violentOffenses, where, 500);
     const rows  = Array.isArray(data) ? data : (data.data || data.results || []);
     if (!rows.length) throw new Error('No rows returned');
 
@@ -571,16 +572,15 @@ async function loadNational() {
     setApiStatus('live');
     document.getElementById('trendSrc').className = 'src live';
 
-    // Filter to permutation_number=1 only (primary estimate), group by year
-    const prim  = rows.filter(r => r.permutation_number === '1' || r.permutation_number === 1);
+    // Group by year (permutation_number=1 already filtered in query)
     const byYear = {};
-    prim.forEach(r => {
+    rows.forEach(r => {
       const yr = parseInt(r.time_series_start_year || r.year || r.data_year);
       if (!yr) return;
       byYear[yr] = { count: parseFloat(r.estimate || 0), rate: 0 };
     });
 
-    const years  = Object.keys(byYear).map(Number).filter(y => y >= state.yrFrom && y <= state.yrTo).sort((a,b)=>a-b);
+    const years  = Object.keys(byYear).map(Number).sort((a,b)=>a-b);
     const counts = years.map(y => Math.round(byYear[y].count));
     // Derive rate per 100K using US population estimates by year
     const usPop  = {2015:321e6,2016:323e6,2017:325e6,2018:327e6,2019:328e6,2020:331e6,2021:332e6,2022:333e6,2023:335e6,2024:337e6};
