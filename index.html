@@ -556,7 +556,7 @@ function updateKPIs(trend) {
 async function loadNational() {
   setApiStatus('checking');
   try {
-    const data = await apiFetch(`/api/summarized/national/homicide/${state.yrFrom}/${state.yrTo}`);
+    const data = await apiFetch(`/api/estimates/national/${state.yrFrom}/${state.yrTo}`);
     hideError();
     setApiStatus('live');
     document.getElementById('trendSrc').className = 'src live';
@@ -600,7 +600,7 @@ async function loadNational() {
 // ── LOAD STATE RANKING ────────────────────────────────────────────────────────
 async function loadStateRanking() {
   try {
-    const data = await apiFetch(`/api/summarized/state/homicide/${state.yrTo}/${state.yrTo}`);
+    const data = await apiFetch(`/api/estimates/states/${state.yrTo}/${state.yrTo}`);
     const results = data.results || data;
     const stateData = results
       .map(r => ({ n: r.state_name || r.state_abbr, v: +(r.rate_per_100_000 || r.rate || (r.population > 0 ? (r.actual_count||r.homicide||0)/r.population*100000 : 0)).toFixed(1) }))
@@ -616,7 +616,7 @@ async function loadStateRanking() {
 // ── LOAD OFFENSE BREAKDOWN ────────────────────────────────────────────────────
 async function loadOffenseBreakdown() {
   try {
-    const data = await apiFetch(`/api/summarized/national/homicide/${state.yrTo}/${state.yrTo}`);
+    const data = await apiFetch(`/api/estimates/national/${state.yrTo}/${state.yrTo}`);
     const r = (data.results || data)[0];
     if (r) {
       const labels = ['Homicide','Rape','Robbery','Agg. Assault','Burglary'];
@@ -632,7 +632,7 @@ async function loadOffenseBreakdown() {
 async function loadStateData(abbr) {
   setApiStatus('checking');
   try {
-    const data = await apiFetch(`/api/summarized/state/homicide/${state.yrFrom}/${state.yrTo}?state_abbr=${abbr}`);
+    const data = await apiFetch(`/api/estimates/states/${abbr}/${state.yrFrom}/${state.yrTo}`);
     hideError();
     setApiStatus('live');
     const results = (data.results || data).sort((a, b) => a.year - b.year);
