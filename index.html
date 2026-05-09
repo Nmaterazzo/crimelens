@@ -363,8 +363,14 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 
 <script>
 // ── CONFIG ────────────────────────────────────────────────────────────────────
-const API_KEY = 'tAHK1kqDLcY3LT2eTQuAMLiKjyCbUg99V2U4TXuY';
-const BASE    = 'https://api.usa.gov/crime/fbi/sapi';
+// FBI/BJS moved to api.ojp.gov in July 2025. No API key needed.
+const OJP_BASE = 'https://api.ojp.gov/bjsdataset/v1';
+const ENDPOINTS = {
+  violentOffenses:  `${OJP_BASE}/x3sz-eb6y.json`,
+  propertyOffenses: `${OJP_BASE}/kj7p-vx4s.json`,
+  victimRates:      `${OJP_BASE}/uy37-xgmh.json`,
+  violentIncidents: `${OJP_BASE}/r32q-bdaw.json`,
+};
 
 // Current app state
 let state = {
@@ -385,10 +391,10 @@ Chart.defaults.font.family = "'Space Mono', monospace";
 Chart.defaults.font.size   = 9;
 
 // ── API HELPERS ───────────────────────────────────────────────────────────────
-async function apiFetch(path) {
-  const sep = path.includes('?') ? '&' : '?';
-  const url = `${BASE}${path}${sep}api_key=${API_KEY}`;
-  const r   = await fetch(url);
+async function ojpFetch(endpoint, where = '', limit = 50000) {
+  let url = endpoint + '?$limit=' + limit;
+  if (where) url += `&$where=${encodeURIComponent(where)}`;
+  const r = await fetch(url);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
