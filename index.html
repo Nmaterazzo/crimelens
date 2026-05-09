@@ -571,21 +571,20 @@ async function loadNational() {
     setApiStatus('live');
     document.getElementById('trendSrc').className = 'src live';
 
-    // Group by year
+    // Filter to permutation_number=1 only (primary estimate), group by year
+    const prim  = rows.filter(r => r.permutation_number === '1' || r.permutation_number === 1);
     const byYear = {};
-    rows.forEach(r => {
-      const yr = parseInt(r.year || r.data_year);
+    prim.forEach(r => {
+      const yr = parseInt(r.time_series_start_year || r.year || r.data_year);
       if (!yr) return;
-      if (!byYear[yr]) byYear[yr] = { count: 0, rate: 0, n: 0 };
-      byYear[yr].count += parseFloat(r.estimate || r.count_estimate || 0);
-      byYear[yr].rate  += parseFloat(r.rate_estimate || r.rate || 0);
-      byYear[yr].n++;
+      byYear[yr] = { count: parseFloat(r.estimate || 0), rate: 0 };
     });
 
     const years  = Object.keys(byYear).map(Number).filter(y => y >= state.yrFrom && y <= state.yrTo).sort((a,b)=>a-b);
     const counts = years.map(y => Math.round(byYear[y].count));
-    const rates  = years.map(y => byYear[y].n > 0 ? +(byYear[y].rate / byYear[y].n).toFixed(2) : 0);
-    const useRates = rates.some(r => r > 0) ? rates : counts.map(c => +(c/330000000*100000).toFixed(2));
+    // Derive rate per 100K using US population estimates by year
+    const usPop  = {2015:321e6,2016:323e6,2017:325e6,2018:327e6,2019:328e6,2020:331e6,2021:332e6,2022:333e6,2023:335e6,2024:337e6};
+    const useRates = years.map((y,i) => +((counts[i] / (usPop[y]||330e6)) * 100000).toFixed(2));
 
     renderTrend(years, useRates, '#ff3d4e');
     updateKPIs({ years, vals: useRates, counts });
@@ -613,11 +612,12 @@ async function loadOffenseBreakdown() {
     const where = `estimate_type='count' and estimate_domain_1='Offense count'`;
     const data  = await ojpFetch(ENDPOINTS.violentOffenses, where, 5000);
     const rows  = Array.isArray(data) ? data : (data.data || data.results || []);
-    const maxYear = Math.max(...rows.map(r => parseInt(r.year||r.data_year)||0));
+    const prim2  = rows.filter(r => r.permutation_number === '1' || r.permutation_number === 1);
+    const maxYear = Math.max(...prim2.map(r => parseInt(r.time_series_start_year||r.year||0)||0));
     const totals = {};
-    rows.filter(r => parseInt(r.year||r.data_year) === maxYear).forEach(r => {
+    prim2.filter(r => parseInt(r.time_series_start_year||r.year) === maxYear).forEach(r => {
       const name = (r.indicator_name || 'Other').replace(' and Non-negligent Manslaughter','');
-      totals[name] = (totals[name]||0) + parseFloat(r.estimate||r.count_estimate||0);
+      totals[name] = (totals[name]||0) + parseFloat(r.estimate||0);
     });
     const sorted = Object.entries(totals).sort((a,b)=>b[1]-a[1]).slice(0,6);
     if (sorted.length) {
