@@ -363,14 +363,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 
 <script>
 // ── CONFIG ────────────────────────────────────────────────────────────────────
-// FBI/BJS moved to api.ojp.gov in July 2025. No API key needed.
-const OJP_BASE = 'https://api.ojp.gov/bjsdataset/v1';
-const ENDPOINTS = {
-  violentOffenses:  `${OJP_BASE}/x3sz-eb6y.json`,
-  propertyOffenses: `${OJP_BASE}/kj7p-vx4s.json`,
-  victimRates:      `${OJP_BASE}/uy37-xgmh.json`,
-  violentIncidents: `${OJP_BASE}/r32q-bdaw.json`,
-};
+const WORKER = 'https://crimelens-proxy.nmaterazzo2435.workers.dev';
 
 // Current app state
 let state = {
@@ -391,10 +384,8 @@ Chart.defaults.font.family = "'Space Mono', monospace";
 Chart.defaults.font.size   = 9;
 
 // ── API HELPERS ───────────────────────────────────────────────────────────────
-async function ojpFetch(endpoint, where = '', limit = 50000) {
-  let url = endpoint + '?$limit=' + limit;
-  if (where) url += `&$where=${encodeURIComponent(where)}`;
-  const r = await fetch(url);
+async function workerFetch(path) {
+  const r = await fetch(WORKER + path);
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
@@ -562,43 +553,29 @@ function updateKPIs(trend) {
 async function loadNational() {
   setApiStatus('checking');
   try {
-    // No year filter — fetch all years, filter client-side
-    const where = `indicator_name='Murder and Non-negligent Manslaughter' and estimate_type='count' and estimate_domain_1='Offense count' and permutation_number='1'`;
-    const data  = await ojpFetch(ENDPOINTS.violentOffenses, where, 500);
-    const rows  = Array.isArray(data) ? data : (data.data || data.results || []);
-    if (!rows.length) throw new Error('No rows returned');
+    const from = state.yrFrom || 2000;
+    const to   = state.yrTo   || 2024;
+    const rows = await workerFetch(`/national?from=${from}&to=${to}`);
+    if (!rows.length) throw new Error('No data returned');
 
     hideError();
     setApiStatus('live');
     document.getElementById('trendSrc').className = 'src live';
+    document.getElementById('stateSrc').className = 'src live';
 
-    // Group by year (permutation_number=1 already filtered in query)
-    const byYear = {};
-    rows.forEach(r => {
-      const yr = parseInt(r.time_series_start_year || r.year || r.data_year);
-      if (!yr) return;
-      byYear[yr] = { count: parseFloat(r.estimate || 0), rate: 0 };
-    });
+    const years  = rows.map(r => r.year);
+    const counts = rows.map(r => r.homicide || 0);
+    const rates  = rows.map(r => r.rate || 0);
 
-    const years  = Object.keys(byYear).map(Number).sort((a,b)=>a-b);
-    const counts = years.map(y => Math.round(byYear[y].count));
-    // Derive rate per 100K using US population estimates by year
-    const usPop  = {2015:321e6,2016:323e6,2017:325e6,2018:327e6,2019:328e6,2020:331e6,2021:332e6,2022:333e6,2023:335e6,2024:337e6};
-    const useRates = years.map((y,i) => +((counts[i] / (usPop[y]||330e6)) * 100000).toFixed(2));
-
-    renderTrend(years, useRates, '#ff3d4e');
-    updateKPIs({ years, vals: useRates, counts });
-    loadOffenseBreakdown();
-    renderStateBars(DUMMY.states);
+    renderTrend(years, rates, '#ff3d4e');
+    updateKPIs({ years, vals: rates, counts });
+    loadStateRanking();
+    loadOffenseBreakdown(rows);
 
   } catch (err) {
     console.error('FBI API error:', err);
     setApiStatus('error');
-    const isCors = err.message && (err.message.includes('Failed to fetch') || err.message.includes('NetworkError'));
-    showError(isCors
-      ? `<strong>CORS RESTRICTION</strong> — Needs Cloudflare Worker proxy. Showing demo data.`
-      : `<strong>API ERROR:</strong> ${err.message} — Showing demo data.`
-    );
+    showError(`<strong>API ERROR:</strong> ${err.message} — Showing demo data.`);
     renderTrend(DUMMY.trend.years, DUMMY.trend.vals, '#ff3d4e');
     updateKPIs(DUMMY.trend);
     renderStateBars(DUMMY.states);
@@ -607,21 +584,14 @@ async function loadNational() {
 }
 
 // ── LOAD OFFENSE BREAKDOWN ────────────────────────────────────────────────────
-async function loadOffenseBreakdown() {
+async function loadOffenseBreakdown(rows) {
   try {
-    const where = `estimate_type='count' and estimate_domain_1='Offense count'`;
-    const data  = await ojpFetch(ENDPOINTS.violentOffenses, where, 5000);
-    const rows  = Array.isArray(data) ? data : (data.data || data.results || []);
-    const prim2  = rows.filter(r => r.permutation_number === '1' || r.permutation_number === 1);
-    const maxYear = Math.max(...prim2.map(r => parseInt(r.time_series_start_year||r.year||0)||0));
-    const totals = {};
-    prim2.filter(r => parseInt(r.time_series_start_year||r.year) === maxYear).forEach(r => {
-      const name = (r.indicator_name || 'Other').replace(' and Non-negligent Manslaughter','');
-      totals[name] = (totals[name]||0) + parseFloat(r.estimate||0);
-    });
-    const sorted = Object.entries(totals).sort((a,b)=>b[1]-a[1]).slice(0,6);
-    if (sorted.length) {
-      renderOffenses(sorted.map(e=>e[0]), sorted.map(e=>Math.round(e[1])));
+    if (!rows || !rows.length) throw new Error('No rows');
+    const last = rows[rows.length - 1];
+    const labels = ['Homicide', 'Rape', 'Robbery', 'Assault', 'Burglary'];
+    const vals   = [last.homicide||0, last.rape||0, last.robbery||0, last.assault||0, last.burglary||0];
+    if (vals.some(v => v > 0)) {
+      renderOffenses(labels, vals);
     } else {
       renderOffenses(DUMMY.offenses.labels, DUMMY.offenses.vals);
     }
@@ -632,15 +602,43 @@ async function loadOffenseBreakdown() {
 
 // ── LOAD STATE RANKING ────────────────────────────────────────────────────────
 async function loadStateRanking() {
-  renderStateBars(DUMMY.states);
+  try {
+    const year = state.yrTo || 2019;
+    const rows = await workerFetch(`/state-rankings?year=${year}`);
+    const top7 = rows.slice(0, 7).map(r => ({ n: r.name || r.state, v: r.rate }));
+    renderStateBars(top7.length ? top7 : DUMMY.states);
+    document.getElementById('stateSrc').className = 'src live';
+  } catch(e) {
+    renderStateBars(DUMMY.states);
+  }
 }
 
 // ── LOAD STATE DATA ───────────────────────────────────────────────────────────
 async function loadStateData(abbr) {
-  setApiStatus('error');
-  showError(`<strong>STATE DRILL-DOWN</strong> — Needs Cloudflare Worker for state filtering. Showing national demo data.`);
-  renderTrend(DUMMY.trend.years, DUMMY.trend.vals, '#ff3d4e');
-  updateKPIs(DUMMY.trend);
+  setApiStatus('checking');
+  try {
+    const from = state.yrFrom || 2000;
+    const to   = state.yrTo   || 2019;
+    const rows = await workerFetch(`/state/${abbr}?from=${from}&to=${to}`);
+    if (!rows.length) throw new Error('No state data');
+
+    hideError();
+    setApiStatus('live');
+
+    const years  = rows.map(r => r.year);
+    const counts = rows.map(r => r.homicide || 0);
+    const rates  = rows.map(r => r.rate || 0);
+
+    renderTrend(years, rates, '#ff3d4e');
+    updateKPIs({ years, vals: rates, counts });
+    loadOffenseBreakdown(rows);
+
+  } catch (err) {
+    setApiStatus('error');
+    showError(`<strong>STATE ERROR:</strong> ${err.message} — Showing demo data.`);
+    renderTrend(DUMMY.trend.years, DUMMY.trend.vals, '#ff3d4e');
+    updateKPIs(DUMMY.trend);
+  }
 }
 
 // ── UI HANDLERS ───────────────────────────────────────────────────────────────
