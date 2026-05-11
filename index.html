@@ -243,7 +243,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 
       <div class="fsec">
         <div class="flbl">Age Group</div>
-        <div class="pills">
+        <div class="pills" id="agePills">
           <span class="pill active" onclick="togglePill(this)">All</span>
           <span class="pill" onclick="togglePill(this)">0–14</span>
           <span class="pill" onclick="togglePill(this)">15–24</span>
@@ -257,7 +257,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 
       <div class="fsec">
         <div class="flbl">Race / Ethnicity</div>
-        <div class="pills">
+        <div class="pills" id="racePills">
           <span class="pill active" onclick="togglePill(this)">All</span>
           <span class="pill" onclick="togglePill(this)">White</span>
           <span class="pill" onclick="togglePill(this)">Black</span>
@@ -270,7 +270,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
 
       <div class="fsec">
         <div class="flbl">Sex</div>
-        <div class="pills">
+        <div class="pills" id="sexPills">
           <span class="pill active" onclick="togglePill(this)">All</span>
           <span class="pill" onclick="togglePill(this)">Male</span>
           <span class="pill" onclick="togglePill(this)">Female</span>
@@ -329,8 +329,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
     </div>
 
     <div class="kpi-bar" id="kpiBar">
-      <div class="kpi"><div class="kpi-lbl">Homicide Rate / 100K</div><div class="kpi-val" id="kv1">—</div><div class="kpi-sub" id="ks1">Loading...</div><div class="kpi-delta" id="kd1"></div></div>
-      <div class="kpi"><div class="kpi-lbl">Total Homicides</div><div class="kpi-val" id="kv2">—</div><div class="kpi-sub" id="ks2">Loading...</div><div class="kpi-delta" id="kd2"></div></div>
+      <div class="kpi"><div class="kpi-lbl" id="kpi-lbl-1">Homicide Rate / 100K</div><div class="kpi-val" id="kv1">—</div><div class="kpi-sub" id="ks1">Loading...</div><div class="kpi-delta" id="kd1"></div></div>
+      <div class="kpi"><div class="kpi-lbl" id="kpi-lbl-2">Total Homicides</div><div class="kpi-val" id="kv2">—</div><div class="kpi-sub" id="ks2">Loading...</div><div class="kpi-delta" id="kd2"></div></div>
       <div class="kpi"><div class="kpi-lbl">Clearance Rate</div><div class="kpi-val" id="kv3">—</div><div class="kpi-sub" id="ks3">Loading...</div><div class="kpi-delta" id="kd3"></div></div>
       <div class="kpi"><div class="kpi-lbl">Peak Year Rate</div><div class="kpi-val" id="kv4">—</div><div class="kpi-sub" id="ks4">Loading...</div><div class="kpi-delta" id="kd4"></div></div>
     </div>
@@ -352,7 +352,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
       </div>
       <div class="cp">
         <div class="cp-head">
-          <div><div class="cp-title">OFFENSE BREAKDOWN</div><div class="cp-sub">NATIONAL TOTALS · MOST RECENT YEAR</div></div>
+          <div><div class="cp-title" id="cp-demo-title">OFFENSE BREAKDOWN</div><div class="cp-sub" id="cp-demo-sub">NATIONAL TOTALS · MOST RECENT YEAR</div></div>
           <span class="src" id="demoSrc">FBI</span>
         </div>
         <div class="cw"><canvas id="dChart"></canvas></div>
@@ -517,28 +517,44 @@ function renderOffenses(labels, vals) {
   });
 }
 
+// ── METRIC CONFIG ────────────────────────────────────────────────────────────
+const METRIC_CONFIG = {
+  'homicide':     { label:'HOMICIDE',     color:'#ff3d4e', src:'FBI',     cdcMetric:'homicide',  kpi1:'Homicide Rate / 100K', kpi2:'Total Homicides'  },
+  'suicide':      { label:'SUICIDE',      color:'#00cfff', src:'CDC',     cdcMetric:'suicide',   kpi1:'Suicide Rate / 100K',  kpi2:'Total Deaths'     },
+  'overdose':     { label:'OVERDOSE',     color:'#a46eff', src:'CDC',     cdcMetric:'overdose',  kpi1:'Overdose Rate / 100K', kpi2:'Total Deaths'     },
+  'self-defense': { label:'SELF-DEFENSE', color:'#00e87a', src:'FBI',     cdcMetric:null,        kpi1:'Justifiable Rate',     kpi2:'Total Incidents'  },
+  'violent-crime':{ label:'VIOLENT',      color:'#ffaa00', src:'FBI',     cdcMetric:null,        kpi1:'Violent Rate / 100K',  kpi2:'Total Incidents'  },
+  'property-crime':{ label:'PROPERTY',   color:'#ffaa00', src:'FBI',     cdcMetric:null,        kpi1:'Property Rate / 100K', kpi2:'Total Incidents'  },
+  'hate-crime':   { label:'HATE CRIMES',  color:'#ff3d4e', src:'FBI',     cdcMetric:null,        kpi1:'Hate Crime Rate',      kpi2:'Total Incidents'  },
+  'firearms':     { label:'FIREARMS',     color:'#00cfff', src:'ATF',     cdcMetric:null,        kpi1:'Firearm Rate / 100K',  kpi2:'Total Incidents'  },
+};
+
 // ── UPDATE KPIs ───────────────────────────────────────────────────────────────
 function updateKPIs(trend) {
+  const cfg   = METRIC_CONFIG[state.metric] || METRIC_CONFIG['homicide'];
   const last  = trend.vals[trend.vals.length - 1];
   const lastY = trend.years[trend.years.length - 1];
   const lastC = trend.counts ? trend.counts[trend.counts.length - 1] : null;
   const peak  = Math.max(...trend.vals);
   const peakY = trend.years[trend.vals.indexOf(peak)];
   const first = trend.vals[0];
-  const pct   = (((last - first) / first) * 100).toFixed(0);
+  const pct   = first > 0 ? (((last - first) / first) * 100).toFixed(0) : 0;
   const dir   = pct > 0 ? 'up' : 'dn';
   const arrow = pct > 0 ? '▲' : '▼';
+
+  document.getElementById('kpi-lbl-1').textContent = cfg.kpi1;
+  document.getElementById('kpi-lbl-2').textContent = cfg.kpi2;
 
   document.getElementById('kv1').textContent = typeof last === 'number' ? last.toFixed(1) : last;
   document.getElementById('ks1').textContent = `Rate per 100K · ${lastY}`;
   document.getElementById('kd1').innerHTML   = `<span class="${dir}">${arrow} ${Math.abs(pct)}% since ${trend.years[0]}</span>`;
 
   document.getElementById('kv2').textContent = lastC ? lastC.toLocaleString() : '—';
-  document.getElementById('ks2').textContent = `Total incidents · ${lastY}`;
+  document.getElementById('ks2').textContent = `Total · ${lastY}`;
   document.getElementById('kd2').innerHTML   = '';
 
   document.getElementById('kv3').textContent = '—';
-  document.getElementById('ks3').textContent = 'Clearance data loading';
+  document.getElementById('ks3').textContent = 'Source: ' + cfg.src;
 
   document.getElementById('kv4').textContent = typeof peak === 'number' ? peak.toFixed(1) : peak;
   document.getElementById('ks4').textContent = `Peak rate · ${peakY}`;
@@ -549,7 +565,21 @@ function updateKPIs(trend) {
   }, 200));
 }
 
-// ── LOAD NATIONAL DATA ────────────────────────────────────────────────────────
+// ── GET ACTIVE DEMOGRAPHICS ───────────────────────────────────────────────────
+function getActivePills(containerId) {
+  const pills = document.querySelectorAll(`#${containerId} .pill.active`);
+  const vals  = [...pills].map(p => p.textContent.trim()).filter(v => v !== 'All');
+  return vals.length ? vals[0] : null; // single select for now
+}
+
+function getActiveRace() { return getActivePills('racePills'); }
+function getActiveAge()  { return getActivePills('agePills');  }
+function getActiveSex()  {
+  const pills = [...document.querySelectorAll('#sexPills .pill.active')].map(p => p.textContent.trim()).filter(v => v !== 'All');
+  return pills.length ? pills[0] : null;
+}
+
+// ── LOAD NATIONAL (FBI homicide) ──────────────────────────────────────────────
 async function loadNational() {
   setApiStatus('checking');
   try {
@@ -560,22 +590,22 @@ async function loadNational() {
 
     hideError();
     setApiStatus('live');
+    document.getElementById('trendSrc').textContent = 'FBI';
     document.getElementById('trendSrc').className = 'src live';
-    document.getElementById('stateSrc').className = 'src live';
 
     const years  = rows.map(r => r.year);
     const counts = rows.map(r => r.homicide || 0);
     const rates  = rows.map(r => r.rate || 0);
 
-    renderTrend(years, rates, '#ff3d4e');
+    renderTrend(years, state.display === 'raw' ? counts : rates, '#ff3d4e');
     updateKPIs({ years, vals: rates, counts });
     loadStateRanking();
-    loadOffenseBreakdown(rows);
+    loadCdcByRace('homicide');
 
   } catch (err) {
-    console.error('FBI API error:', err);
+    console.error('Load error:', err);
     setApiStatus('error');
-    showError(`<strong>API ERROR:</strong> ${err.message} — Showing demo data.`);
+    showError(`<strong>API ERROR:</strong> ${err.message}`);
     renderTrend(DUMMY.trend.years, DUMMY.trend.vals, '#ff3d4e');
     updateKPIs(DUMMY.trend);
     renderStateBars(DUMMY.states);
@@ -583,17 +613,69 @@ async function loadNational() {
   }
 }
 
-// ── LOAD OFFENSE BREAKDOWN ────────────────────────────────────────────────────
-async function loadOffenseBreakdown(rows) {
+// ── LOAD CDC METRIC (suicide / overdose / homicide mortality) ─────────────────
+async function loadCdcMetric(metric) {
+  setApiStatus('checking');
+  const cfg   = METRIC_CONFIG[metric];
+  const from  = state.yrFrom || 1999;
+  const to    = state.yrTo   || 2022;
+  const race  = getActiveRace() || '';
+  const sex   = getActiveSex()  || '';
+
   try {
-    if (!rows || !rows.length) throw new Error('No rows');
-    const last = rows[rows.length - 1];
-    const labels = ['Homicide', 'Rape', 'Robbery', 'Assault', 'Burglary'];
-    const vals   = [last.homicide||0, last.rape||0, last.robbery||0, last.assault||0, last.burglary||0];
-    if (vals.some(v => v > 0)) {
+    let url = `/cdc/by-race?metric=${cfg.cdcMetric}&from=${from}&to=${to}`;
+    if (race) url += `&race=${encodeURIComponent(race)}`;
+    if (sex)  url += `&sex=${encodeURIComponent(sex)}`;
+
+    const data = await workerFetch(url);
+
+    hideError();
+    setApiStatus('live');
+    document.getElementById('trendSrc').textContent = 'CDC';
+    document.getElementById('trendSrc').className   = 'src live';
+    document.getElementById('demoSrc').textContent  = 'CDC';
+    document.getElementById('demoSrc').className    = 'src live';
+
+    const years  = data.trend.map(r => r.year);
+    const rates  = data.trend.map(r => r.rate  || 0);
+    const counts = data.trend.map(r => r.deaths || 0);
+
+    renderTrend(years, state.display === 'raw' ? counts : rates, cfg.color);
+    updateKPIs({ years, vals: rates, counts });
+
+    // Race breakdown chart
+    if (data.byRace && data.byRace.length) {
+      const labels = data.byRace.map(r => r.race);
+      const vals   = data.byRace.map(r => state.display === 'raw' ? r.deaths : (r.rate || 0));
       renderOffenses(labels, vals);
-    } else {
-      renderOffenses(DUMMY.offenses.labels, DUMMY.offenses.vals);
+    }
+
+    loadStateRanking();
+
+  } catch (err) {
+    console.error('CDC error:', err);
+    setApiStatus('error');
+    showError(`<strong>CDC ERROR:</strong> ${err.message} — CDC WONDER may be rate-limited (1 query/2min). Try again shortly.`);
+    renderTrend(DUMMY.trend.years, DUMMY.trend.vals, cfg.color);
+    updateKPIs(DUMMY.trend);
+  }
+}
+
+// ── LOAD CDC BY RACE (demographic breakdown chart) ───────────────────────────
+async function loadCdcByRace(metric) {
+  try {
+    const from = state.yrFrom || 1999;
+    const to   = Math.min(state.yrTo || 2022, 2022);
+    const data = await workerFetch(`/cdc/by-race?metric=${metric}&from=${from}&to=${to}`);
+
+    if (data.byRace && data.byRace.length) {
+      const labels = data.byRace.map(r => r.race);
+      const vals   = data.byRace.map(r => r.rate || 0);
+      renderOffenses(labels, vals);
+      document.getElementById('demoSrc').textContent = 'CDC';
+      document.getElementById('demoSrc').className   = 'src live';
+      document.getElementById('cp-demo-title').textContent = 'HOMICIDE MORTALITY BY RACE';
+      document.getElementById('cp-demo-sub').textContent   = 'AGE-ADJ RATE / 100K · CDC WONDER';
     }
   } catch(e) {
     renderOffenses(DUMMY.offenses.labels, DUMMY.offenses.vals);
@@ -603,8 +685,7 @@ async function loadOffenseBreakdown(rows) {
 // ── LOAD STATE RANKING ────────────────────────────────────────────────────────
 async function loadStateRanking() {
   try {
-    const year = state.yrTo || 2019;
-    const rows = await workerFetch(`/state-rankings?year=${year}`);
+    const rows = await workerFetch(`/state-rankings`);
     const top7 = rows.slice(0, 7).map(r => ({ n: r.name || r.state, v: r.rate }));
     renderStateBars(top7.length ? top7 : DUMMY.states);
     document.getElementById('stateSrc').className = 'src live';
@@ -617,27 +698,56 @@ async function loadStateRanking() {
 async function loadStateData(abbr) {
   setApiStatus('checking');
   try {
-    const from = state.yrFrom || 2000;
-    const to   = state.yrTo   || 2019;
-    const rows = await workerFetch(`/state/${abbr}?from=${from}&to=${to}`);
+    const rows = await workerFetch(`/state/${abbr}`);
     if (!rows.length) throw new Error('No state data');
 
     hideError();
     setApiStatus('live');
 
-    const years  = rows.map(r => r.year);
-    const counts = rows.map(r => r.homicide || 0);
-    const rates  = rows.map(r => r.rate || 0);
+    // Filter by year range client-side
+    const from = state.yrFrom || 2000;
+    const to   = state.yrTo   || 2022;
+    const filtered = rows.filter(r => r.year >= from && r.year <= to);
+    const display  = filtered.length ? filtered : rows;
 
-    renderTrend(years, rates, '#ff3d4e');
+    const years  = display.map(r => r.year);
+    const counts = display.map(r => r.homicide || 0);
+    const rates  = display.map(r => r.rate || 0);
+
+    renderTrend(years, state.display === 'raw' ? counts : rates, '#ff3d4e');
     updateKPIs({ years, vals: rates, counts });
-    loadOffenseBreakdown(rows);
+
+    // For state view, show offense breakdown from FBI data
+    const last = display[display.length - 1];
+    renderOffenses(['Homicide'], [state.display === 'raw' ? last.homicide : last.rate]);
 
   } catch (err) {
     setApiStatus('error');
-    showError(`<strong>STATE ERROR:</strong> ${err.message} — Showing demo data.`);
+    showError(`<strong>STATE ERROR:</strong> ${err.message}`);
     renderTrend(DUMMY.trend.years, DUMMY.trend.vals, '#ff3d4e');
     updateKPIs(DUMMY.trend);
+  }
+}
+
+// ── MAIN QUERY DISPATCHER ─────────────────────────────────────────────────────
+async function runMainQuery() {
+  const metric = state.metric;
+  const cfg    = METRIC_CONFIG[metric] || METRIC_CONFIG['homicide'];
+
+  // Update breadcrumb
+  document.getElementById('bcMetric').textContent = cfg.label;
+  document.getElementById('bcFilters').textContent = `${state.yrFrom}–${state.yrTo} · ${getActiveRace() || 'ALL RACES'} · ${getActiveSex() || 'ALL'}`;
+  document.getElementById('trendTitle').textContent = `${cfg.label} TREND — ${state.stAbbr ? document.getElementById('stSel').options[document.getElementById('stSel').selectedIndex]?.text?.toUpperCase() || 'STATE' : 'UNITED STATES'}`;
+
+  if (cfg.cdcMetric) {
+    // CDC metrics: suicide, overdose, cdc-homicide
+    await loadCdcMetric(metric);
+  } else if (state.geo === 'national') {
+    await loadNational();
+  } else if (state.stAbbr) {
+    await loadStateData(state.stAbbr);
+  } else {
+    await loadNational();
   }
 }
 
@@ -656,9 +766,9 @@ function setGeo(level, btn) {
   document.querySelectorAll('.geo-btn').forEach(x => x.classList.remove('active'));
   btn.classList.add('active');
   state.geo = level;
-  document.getElementById('stSel').style.display  = level !== 'national' ? 'block' : 'none';
-  document.getElementById('ctSel').style.display  = level === 'county'   ? 'block' : 'none';
-  if (level === 'national') { state.stAbbr = ''; loadNational(); }
+  document.getElementById('stSel').style.display = level !== 'national' ? 'block' : 'none';
+  document.getElementById('ctSel').style.display = level === 'county'   ? 'block' : 'none';
+  if (level === 'national') { state.stAbbr = ''; document.getElementById('bcGeo').textContent = 'UNITED STATES'; loadNational(); }
 }
 
 function onStateChange(abbr) {
@@ -666,7 +776,7 @@ function onStateChange(abbr) {
   state.stAbbr = abbr;
   const name = document.getElementById('stSel').options[document.getElementById('stSel').selectedIndex].text;
   document.getElementById('bcGeo').textContent = name.toUpperCase();
-  document.getElementById('trendTitle').textContent = `HOMICIDE RATE — ${name.toUpperCase()}`;
+  document.getElementById('trendTitle').textContent = `${(METRIC_CONFIG[state.metric]||METRIC_CONFIG['homicide']).label} RATE — ${name.toUpperCase()}`;
   loadStateData(abbr);
 }
 
@@ -674,10 +784,23 @@ function pickM(btn, cls, metric) {
   document.querySelectorAll('.mbtn').forEach(x => x.className = 'mbtn');
   btn.classList.add(cls);
   state.metric = metric;
-  document.getElementById('bcMetric').textContent = btn.textContent.trim();
+  // Don't auto-run on metric change — wait for Generate Report
+  // But update title immediately
+  const cfg = METRIC_CONFIG[metric] || METRIC_CONFIG['homicide'];
+  document.getElementById('bcMetric').textContent = cfg.label;
 }
 
-function togglePill(p) { p.classList.toggle('active'); }
+function togglePill(pill) {
+  // For race/sex/age — single select within group (except All)
+  const group = pill.closest('.pills');
+  if (pill.textContent.trim() === 'All') {
+    group.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+  } else {
+    group.querySelector('.pill:first-child').classList.remove('active'); // deactivate All
+    pill.classList.toggle('active');
+  }
+}
 
 function pickD(btn) {
   document.querySelectorAll('.dbtn').forEach(x => x.classList.remove('active'));
@@ -694,16 +817,14 @@ function runQuery() {
   const btn = document.getElementById('runBtn');
   state.yrFrom = parseInt(document.getElementById('yrF').textContent);
   state.yrTo   = parseInt(document.getElementById('yrT').textContent);
-  document.getElementById('bcFilters').textContent = `${state.yrFrom}–${state.yrTo} · ALL DEMOGRAPHICS`;
   btn.classList.add('loading');
   btn.textContent = 'LOADING...';
 
-  const p = state.geo === 'national' ? loadNational() : loadStateData(state.stAbbr);
-  (p || Promise.resolve()).finally(() => {
+  runMainQuery().finally(() => {
     setTimeout(() => {
       btn.classList.remove('loading');
       btn.textContent = 'GENERATE REPORT';
-    }, 1000);
+    }, 800);
   });
 }
 
